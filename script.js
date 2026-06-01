@@ -5,6 +5,8 @@
 	const FIT_PRECISION = 0.1;
 	const WRAP_BUFFER = 2;
 	let textareaTemplate;
+	let initialViewportHeight;
+	const composingTextareas = new WeakSet();
 
 	function px(value) {
 		return Number.parseFloat(value) || 0;
@@ -36,16 +38,21 @@
 		let mirror = document.getElementById("textarea-fit-mirror");
 		if (mirror) return mirror;
 
-		mirror = document.createElement("div");
+		mirror = document.createElement("textarea");
 		mirror.id = "textarea-fit-mirror";
 		mirror.setAttribute("aria-hidden", "true");
+		mirror.setAttribute("wrap", "off");
+		mirror.tabIndex = -1;
 		Object.assign(mirror.style, {
 			position: "absolute",
 			left: "-10000px",
 			top: "0",
 			visibility: "hidden",
+			width: "0px",
+			height: "0px",
 			whiteSpace: "pre",
 			overflow: "visible",
+			pointerEvents: "none",
 			resize: "none",
 		});
 		document.body.appendChild(mirror);
@@ -53,11 +60,23 @@
 	}
 
 	function getTextareas() {
-		return [...document.querySelectorAll("textarea")];
+		return [...document.querySelectorAll("textarea:not(#textarea-fit-mirror)")];
 	}
 
 	function getTextareaText(textarea) {
 		return textarea.value || textarea.placeholder || " ";
+	}
+
+	function getViewportHeight() {
+		return window.innerHeight || document.documentElement.clientHeight;
+	}
+
+	function getInitialViewportHeight() {
+		if (!initialViewportHeight) {
+			initialViewportHeight = getViewportHeight();
+		}
+
+		return initialViewportHeight;
 	}
 
 	function prepareTextarea(textarea) {
@@ -73,10 +92,11 @@
 		const mirror = getMirror();
 		copyTextStyles(textarea, mirror);
 		mirror.style.fontSize = `${fontSize}px`;
+		mirror.style.padding = "0px";
 		mirror.style.paddingBlockStart = "0px";
 		mirror.style.paddingBlockEnd = "0px";
 		mirror.style.whiteSpace = "pre";
-		mirror.textContent = getTextareaText(textarea);
+		mirror.value = getTextareaText(textarea);
 
 		return {
 			width: mirror.scrollWidth,
@@ -95,7 +115,8 @@
 			const borderX = px(styles.borderLeftWidth) + px(styles.borderRightWidth);
 			const borderY = px(styles.borderTopWidth) + px(styles.borderBottomWidth);
 			const targetWidth =
-				(textarea.getBoundingClientRect().width || textarea.clientWidth) - borderX;
+				(textarea.getBoundingClientRect().width || textarea.clientWidth) -
+				borderX;
 			const fitWidth = Math.max(0, targetWidth - WRAP_BUFFER);
 			const size = measure(textarea, fontSize);
 
@@ -145,12 +166,12 @@
 		const textareas = getTextareas();
 		if (!textareas.length) return;
 
-		const button = document.querySelector("button");
+		const button = document.getElementById("add-textarea");
 		if (button) button.hidden = textareas.length >= MAX_TEXTAREAS;
 
 		textareas.forEach(prepareTextarea);
 
-		const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+		const viewportHeight = getInitialViewportHeight();
 		let fontSize = findSharedFontSize(textareas);
 		applySharedLayout(textareas, fontSize);
 
@@ -164,19 +185,38 @@
 			);
 			applySharedLayout(textareas, fontSize);
 		}
+
+		const input = document.querySelector("input");
+		if (input) input.style.fontSize = `${fontSize}px`;
 	}
 
 	function handleTextareaInput(event) {
 		const textarea = event.currentTarget;
-		if (textarea.value === "" && getTextareas().length > 1) {
+		if (
+			!event.isComposing &&
+			!composingTextareas.has(textarea) &&
+			textarea.value === "" &&
+			getTextareas().length > 1
+		) {
 			textarea.remove();
 		}
 
 		fitAllTextareas();
 	}
 
+	function handleCompositionStart(event) {
+		composingTextareas.add(event.currentTarget);
+	}
+
+	function handleCompositionEnd(event) {
+		composingTextareas.delete(event.currentTarget);
+		fitAllTextareas();
+	}
+
 	function bindTextarea(textarea) {
 		textarea.addEventListener("input", handleTextareaInput);
+		textarea.addEventListener("compositionstart", handleCompositionStart);
+		textarea.addEventListener("compositionend", handleCompositionEnd);
 	}
 
 	function createTextarea() {
@@ -187,7 +227,7 @@
 			: document.createElement("textarea");
 		textarea.value = "";
 		textarea.textContent = "";
-		const button = document.querySelector("button");
+		const button = document.getElementById("add-textarea");
 		button.before(textarea);
 		bindTextarea(textarea);
 		fitAllTextareas();
@@ -195,7 +235,78 @@
 		textarea.select();
 	}
 
+	function updateBackgroundColor(event) {
+		document.documentElement.style.backgroundColor = event.currentTarget.value;
+	}
+
+	async function saveScreenshot() {
+		if (!window.htmlToImage) return;
+
+		const rootStyles = getComputedStyle(document.documentElement);
+		const input = document.querySelector("input");
+		const addButton = document.getElementById("add-textarea");
+		const hiddenBottom =
+			addButton && !addButton.hidden
+				? addButton.getBoundingClientRect().height +
+					px(getComputedStyle(addButton).marginTop) +
+					px(getComputedStyle(addButton).marginBottom)
+				: 0;
+		const fullWidth = document.documentElement.scrollWidth;
+		const width = Math.min(fullWidth, px(rootStyles.width));
+		const height = Math.max(
+			0,
+			document.documentElement.scrollHeight - hiddenBottom,
+		);
+		document.documentElement.classList.add("is-capturing");
+		const link = document.createElement("a");
+		link.download = "shiu.png";
+
+		try {
+			const ratio = window.devicePixelRatio || 1;
+			const canvas = await window.htmlToImage.toCanvas(
+				document.documentElement,
+				{
+					backgroundColor: rootStyles.backgroundColor,
+					canvasHeight: document.documentElement.scrollHeight,
+					canvasWidth: fullWidth,
+					filter: (node) =>
+						!(
+							node instanceof HTMLSelectElement ||
+							node instanceof HTMLButtonElement ||
+							(node instanceof HTMLInputElement &&
+								node === input &&
+								!node.value)
+						),
+					pixelRatio: ratio,
+					width: fullWidth,
+				},
+			);
+			const croppedCanvas = document.createElement("canvas");
+			const croppedContext = croppedCanvas.getContext("2d");
+			const sourceX = ((canvas.width / ratio - width) / 2) * ratio;
+
+			croppedCanvas.width = width * ratio;
+			croppedCanvas.height = height * ratio;
+			croppedContext.drawImage(
+				canvas,
+				sourceX,
+				0,
+				croppedCanvas.width,
+				croppedCanvas.height,
+				0,
+				0,
+				croppedCanvas.width,
+				croppedCanvas.height,
+			);
+			link.href = croppedCanvas.toDataURL("image/png");
+			link.click();
+		} finally {
+			document.documentElement.classList.remove("is-capturing");
+		}
+	}
+
 	document.addEventListener("DOMContentLoaded", () => {
+		initialViewportHeight = getViewportHeight();
 		textareaTemplate = document.querySelector("textarea")?.cloneNode(false);
 		if (textareaTemplate) {
 			textareaTemplate.value = "";
@@ -203,7 +314,15 @@
 		}
 
 		getTextareas().forEach(bindTextarea);
-		document.querySelector("button")?.addEventListener("click", createTextarea);
+		document
+			.getElementById("background-color")
+			?.addEventListener("change", updateBackgroundColor);
+		document
+			.getElementById("save-screenshot")
+			?.addEventListener("click", saveScreenshot);
+		document
+			.getElementById("add-textarea")
+			?.addEventListener("click", createTextarea);
 		window.addEventListener("resize", fitAllTextareas);
 		document.fonts?.ready.then(fitAllTextareas);
 		fitAllTextareas();

@@ -7,6 +7,7 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <title>shiu</title>
+    <script src="vendor/html-to-image.js"></script>
     <script src="script.js"></script>
     <link rel="stylesheet" type="text/css" href="style.css" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
@@ -16,8 +17,16 @@
   </head>
 
   <body>
-    <input placeholder="shio">
+    <div>
+      <select id="background-color">
+        <option value="#ffffff">白</option>
+        <option value="#f7efe2">米</option>
+        <option value="#e8f0e6">青</option>
+      </select>
+      <input placeholder="糸 雨">
+      <button id="save-screenshot" type="button">↓</button>
+    </div>
     <textarea placeholder="⋯⋯" wrap="off"></textarea>
-    <button type="button">＋</button>
+    <button id="add-textarea" type="button">＋</button>
   </body>
 </html>
