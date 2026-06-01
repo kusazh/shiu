@@ -20,7 +20,6 @@
 			"fontStyle",
 			"fontStretch",
 			"letterSpacing",
-			"lineHeight",
 			"textTransform",
 			"textIndent",
 			"textOrientation",
@@ -29,6 +28,10 @@
 		]) {
 			to.style[property] = styles[property];
 		}
+		to.style.lineHeight =
+			styles.lineHeight === "normal"
+				? "normal"
+				: `${px(styles.lineHeight) / px(styles.fontSize)}`;
 		to.style.padding = styles.padding;
 		to.style.border = styles.border;
 		to.style.boxSizing = styles.boxSizing;
@@ -104,6 +107,21 @@
 		};
 	}
 
+	function getLineHeight(textarea, fontSize) {
+		const mirror = getMirror();
+		copyTextStyles(textarea, mirror);
+		mirror.style.fontSize = `${fontSize}px`;
+		mirror.style.padding = "0px";
+		const lineHeight = window.getComputedStyle(mirror).lineHeight;
+
+		return lineHeight === "normal" ? fontSize * 1.2 : px(lineHeight);
+	}
+
+	function getTextBlockWidth(textarea, fontSize) {
+		const lineCount = getTextareaText(textarea).split("\n").length;
+		return lineCount * getLineHeight(textarea, fontSize);
+	}
+
 	function getTextareaMetrics(textareas, fontSize) {
 		let allFitWidth = true;
 		let maxTextWidth = 0;
@@ -119,11 +137,12 @@
 				borderX;
 			const fitWidth = Math.max(0, targetWidth - WRAP_BUFFER);
 			const size = measure(textarea, fontSize);
+			const textWidth = getTextBlockWidth(textarea, fontSize);
 
 			minTargetWidth = Math.min(minTargetWidth, targetWidth);
-			maxTextWidth = Math.max(maxTextWidth, size.width);
+			maxTextWidth = Math.max(maxTextWidth, textWidth);
 			maxHeight = Math.max(maxHeight, Math.ceil(size.height + borderY));
-			allFitWidth &&= size.width <= fitWidth;
+			allFitWidth &&= textWidth <= fitWidth;
 		}
 
 		return { allFitWidth, maxTextWidth, maxHeight, minTargetWidth };
@@ -239,6 +258,50 @@
 		document.documentElement.style.backgroundColor = event.currentTarget.value;
 	}
 
+	function showScreenshot(dataUrl) {
+		let preview = document.getElementById("screenshot-preview");
+		let link = document.getElementById("screenshot-link");
+		let image = document.getElementById("screenshot-image");
+		let hint = document.getElementById("screenshot-hint");
+
+		if (!preview) {
+			preview = document.createElement("dialog");
+			preview.id = "screenshot-preview";
+			preview.addEventListener("click", (event) => {
+				if (event.target === preview) preview.close();
+			});
+			document.body.appendChild(preview);
+		}
+
+		if (!link) {
+			link = document.createElement("a");
+			link.id = "screenshot-link";
+			link.download = "shiu.png";
+			preview.appendChild(link);
+		}
+
+		if (!image) {
+			image = document.createElement("img");
+			image.id = "screenshot-image";
+			link.appendChild(image);
+		}
+
+		if (!hint) {
+			hint = document.createElement("p");
+			hint.id = "screenshot-hint";
+			hint.textContent = "長 觸 存 之";
+			preview.appendChild(hint);
+		}
+
+		link.href = dataUrl;
+		image.src = dataUrl;
+		if (typeof preview.showModal === "function") {
+			preview.showModal();
+		} else {
+			preview.setAttribute("open", "");
+		}
+	}
+
 	async function saveScreenshot() {
 		if (!window.htmlToImage) return;
 
@@ -251,15 +314,14 @@
 					px(getComputedStyle(addButton).marginTop) +
 					px(getComputedStyle(addButton).marginBottom)
 				: 0;
+		const paddingX = px(rootStyles.paddingLeft) + px(rootStyles.paddingRight);
 		const fullWidth = document.documentElement.scrollWidth;
-		const width = Math.min(fullWidth, px(rootStyles.width));
+		const width = Math.min(fullWidth, px(rootStyles.width) + paddingX);
 		const height = Math.max(
 			0,
 			document.documentElement.scrollHeight - hiddenBottom,
 		);
 		document.documentElement.classList.add("is-capturing");
-		const link = document.createElement("a");
-		link.download = "shiu.png";
 
 		try {
 			const ratio = window.devicePixelRatio || 1;
@@ -298,8 +360,7 @@
 				croppedCanvas.width,
 				croppedCanvas.height,
 			);
-			link.href = croppedCanvas.toDataURL("image/png");
-			link.click();
+			showScreenshot(croppedCanvas.toDataURL("image/png"));
 		} finally {
 			document.documentElement.classList.remove("is-capturing");
 		}
