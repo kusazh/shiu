@@ -6,6 +6,9 @@
 	const WRAP_BUFFER = 2;
 	let textareaTemplate;
 	let initialViewportHeight;
+	let fontCssTextPromise;
+	const embeddedFontCssCache = new Map();
+	const fontDataUrlCache = new Map();
 	const composingTextareas = new WeakSet();
 
 	function px(value) {
@@ -68,6 +71,124 @@
 
 	function getTextareaText(textarea) {
 		return textarea.value || textarea.placeholder || " ";
+	}
+
+	function getFontStylesheetUrl() {
+		return document.querySelector('link[href$="I.Ming.css"]')?.href;
+	}
+
+	function getScreenshotText() {
+		const input = document.querySelector("input");
+		return [
+			input?.value || "",
+			...getTextareas().map(getTextareaText),
+		].join("");
+	}
+
+	function getUsedCodePoints() {
+		const codePoints = new Set();
+		for (const character of getScreenshotText()) {
+			codePoints.add(character.codePointAt(0));
+		}
+		return codePoints;
+	}
+
+	function unicodeRangeMatches(rangeText, codePoints) {
+		if (!rangeText) return true;
+
+		for (const range of rangeText.split(",")) {
+			const match = range.trim().match(/^U\+([0-9A-F?]+)(?:-([0-9A-F]+))?$/i);
+			if (!match) continue;
+
+			if (match[1].includes("?")) {
+				const start = Number.parseInt(match[1].replaceAll("?", "0"), 16);
+				const end = Number.parseInt(match[1].replaceAll("?", "F"), 16);
+				for (const codePoint of codePoints) {
+					if (codePoint >= start && codePoint <= end) return true;
+				}
+				continue;
+			}
+
+			const start = Number.parseInt(match[1], 16);
+			const end = match[2] ? Number.parseInt(match[2], 16) : start;
+			for (const codePoint of codePoints) {
+				if (codePoint >= start && codePoint <= end) return true;
+			}
+		}
+
+		return false;
+	}
+
+	function arrayBufferToBase64(buffer) {
+		const bytes = new Uint8Array(buffer);
+		const chunkSize = 0x8000;
+		let binary = "";
+
+		for (let index = 0; index < bytes.length; index += chunkSize) {
+			binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+		}
+
+		return btoa(binary);
+	}
+
+	async function getFontDataUrl(url) {
+		if (!fontDataUrlCache.has(url)) {
+			fontDataUrlCache.set(
+				url,
+				fetch(url)
+					.then((response) => response.arrayBuffer())
+					.then(
+						(buffer) =>
+							`data:font/woff2;base64,${arrayBufferToBase64(buffer)}`,
+					),
+			);
+		}
+
+		return fontDataUrlCache.get(url);
+	}
+
+	async function embedFontFaceBlock(block, baseUrl) {
+		let embeddedBlock = block;
+		const urls = [
+			...block.matchAll(/url\((['"]?)([^'")]+\.woff2)\1\)/g),
+		].map((match) => match[2]);
+
+		for (const url of urls) {
+			const absoluteUrl = new URL(url, baseUrl).href;
+			embeddedBlock = embeddedBlock.replaceAll(url, await getFontDataUrl(absoluteUrl));
+		}
+
+		return embeddedBlock;
+	}
+
+	async function getEmbeddedFontCss() {
+		const stylesheetUrl = getFontStylesheetUrl();
+		if (!stylesheetUrl) return "";
+
+		const codePoints = getUsedCodePoints();
+		const cacheKey = [...codePoints].sort((a, b) => a - b).join(",");
+		if (embeddedFontCssCache.has(cacheKey)) return embeddedFontCssCache.get(cacheKey);
+
+		try {
+			fontCssTextPromise ||= fetch(stylesheetUrl).then((response) => response.text());
+			const cssText = await fontCssTextPromise;
+			const blocks = cssText.match(/@font-face\s*{[\s\S]*?}/g) || [];
+			const matchingBlocks = blocks.filter((block) => {
+				const range = block.match(/unicode-range:\s*([^;]+);/i)?.[1];
+				return unicodeRangeMatches(range, codePoints);
+			});
+			const embeddedCss = (
+				await Promise.all(
+					matchingBlocks.map((block) => embedFontFaceBlock(block, stylesheetUrl)),
+				)
+			).join("\n");
+
+			embeddedFontCssCache.set(cacheKey, embeddedCss);
+			return embeddedCss;
+		} catch (error) {
+			console.warn("Unable to embed web font for screenshot.", error);
+			return "";
+		}
 	}
 
 	function getViewportHeight() {
@@ -305,6 +426,8 @@
 	async function saveScreenshot() {
 		if (!window.htmlToImage) return;
 
+		await document.fonts?.ready;
+		const fontEmbedCSS = await getEmbeddedFontCss();
 		const rootStyles = getComputedStyle(document.documentElement);
 		const input = document.querySelector("input");
 		const addButton = document.getElementById("add-textarea");
@@ -338,9 +461,10 @@
 							(node instanceof HTMLInputElement &&
 								node === input &&
 								!node.value)
-						),
+					),
 					pixelRatio: ratio,
 					width: fullWidth,
+					...(fontEmbedCSS ? { fontEmbedCSS } : {}),
 				},
 			);
 			const croppedCanvas = document.createElement("canvas");
