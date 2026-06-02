@@ -79,10 +79,9 @@
 
 	function getScreenshotText() {
 		const input = document.querySelector("input");
-		return [
-			input?.value || "",
-			...getTextareas().map(getTextareaText),
-		].join("");
+		return [input?.value || "", ...getTextareas().map(getTextareaText)].join(
+			"",
+		);
 	}
 
 	function getUsedCodePoints() {
@@ -125,7 +124,9 @@
 		let binary = "";
 
 		for (let index = 0; index < bytes.length; index += chunkSize) {
-			binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+			binary += String.fromCharCode(
+				...bytes.subarray(index, index + chunkSize),
+			);
 		}
 
 		return btoa(binary);
@@ -138,8 +139,7 @@
 				fetch(url)
 					.then((response) => response.arrayBuffer())
 					.then(
-						(buffer) =>
-							`data:font/woff2;base64,${arrayBufferToBase64(buffer)}`,
+						(buffer) => `data:font/woff2;base64,${arrayBufferToBase64(buffer)}`,
 					),
 			);
 		}
@@ -149,13 +149,16 @@
 
 	async function embedFontFaceBlock(block, baseUrl) {
 		let embeddedBlock = block;
-		const urls = [
-			...block.matchAll(/url\((['"]?)([^'")]+\.woff2)\1\)/g),
-		].map((match) => match[2]);
+		const urls = [...block.matchAll(/url\((['"]?)([^'")]+\.woff2)\1\)/g)].map(
+			(match) => match[2],
+		);
 
 		for (const url of urls) {
 			const absoluteUrl = new URL(url, baseUrl).href;
-			embeddedBlock = embeddedBlock.replaceAll(url, await getFontDataUrl(absoluteUrl));
+			embeddedBlock = embeddedBlock.replaceAll(
+				url,
+				await getFontDataUrl(absoluteUrl),
+			);
 		}
 
 		return embeddedBlock;
@@ -167,10 +170,13 @@
 
 		const codePoints = getUsedCodePoints();
 		const cacheKey = [...codePoints].sort((a, b) => a - b).join(",");
-		if (embeddedFontCssCache.has(cacheKey)) return embeddedFontCssCache.get(cacheKey);
+		if (embeddedFontCssCache.has(cacheKey))
+			return embeddedFontCssCache.get(cacheKey);
 
 		try {
-			fontCssTextPromise ||= fetch(stylesheetUrl).then((response) => response.text());
+			fontCssTextPromise ||= fetch(stylesheetUrl).then((response) =>
+				response.text(),
+			);
 			const cssText = await fontCssTextPromise;
 			const blocks = cssText.match(/@font-face\s*{[\s\S]*?}/g) || [];
 			const matchingBlocks = blocks.filter((block) => {
@@ -179,7 +185,9 @@
 			});
 			const embeddedCss = (
 				await Promise.all(
-					matchingBlocks.map((block) => embedFontFaceBlock(block, stylesheetUrl)),
+					matchingBlocks.map((block) =>
+						embedFontFaceBlock(block, stylesheetUrl),
+					),
 				)
 			).join("\n");
 
@@ -228,19 +236,8 @@
 		};
 	}
 
-	function getLineHeight(textarea, fontSize) {
-		const mirror = getMirror();
-		copyTextStyles(textarea, mirror);
-		mirror.style.fontSize = `${fontSize}px`;
-		mirror.style.padding = "0px";
-		const lineHeight = window.getComputedStyle(mirror).lineHeight;
-
-		return lineHeight === "normal" ? fontSize * 1.2 : px(lineHeight);
-	}
-
 	function getTextBlockWidth(textarea, fontSize) {
-		const lineCount = getTextareaText(textarea).split("\n").length;
-		return lineCount * getLineHeight(textarea, fontSize);
+		return measure(textarea, fontSize).width;
 	}
 
 	function getTextareaMetrics(textareas, fontSize) {
@@ -429,20 +426,13 @@
 		await document.fonts?.ready;
 		const fontEmbedCSS = await getEmbeddedFontCss();
 		const rootStyles = getComputedStyle(document.documentElement);
-		const input = document.querySelector("input");
 		const addButton = document.getElementById("add-textarea");
-		const hiddenBottom =
-			addButton && !addButton.hidden
-				? addButton.getBoundingClientRect().height +
-					px(getComputedStyle(addButton).marginTop) +
-					px(getComputedStyle(addButton).marginBottom)
-				: 0;
 		const paddingX = px(rootStyles.paddingLeft) + px(rootStyles.paddingRight);
 		const fullWidth = document.documentElement.scrollWidth;
 		const width = Math.min(fullWidth, px(rootStyles.width) + paddingX);
 		const height = Math.max(
 			0,
-			document.documentElement.scrollHeight - hiddenBottom,
+			document.documentElement.scrollHeight - (addButton.hidden ? 0 : 35),
 		);
 		document.documentElement.classList.add("is-capturing");
 
@@ -454,14 +444,7 @@
 					backgroundColor: rootStyles.backgroundColor,
 					canvasHeight: document.documentElement.scrollHeight,
 					canvasWidth: fullWidth,
-					filter: (node) =>
-						!(
-							node instanceof HTMLSelectElement ||
-							node instanceof HTMLButtonElement ||
-							(node instanceof HTMLInputElement &&
-								node === input &&
-								!node.value)
-					),
+					filter: (node) => node !== addButton,
 					pixelRatio: ratio,
 					width: fullWidth,
 					...(fontEmbedCSS ? { fontEmbedCSS } : {}),
