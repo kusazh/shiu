@@ -203,14 +203,6 @@
 		return window.innerHeight || document.documentElement.clientHeight;
 	}
 
-	function getInitialViewportHeight() {
-		if (!initialViewportHeight) {
-			initialViewportHeight = getViewportHeight();
-		}
-
-		return initialViewportHeight;
-	}
-
 	function prepareTextarea(textarea) {
 		textarea.setAttribute("wrap", "off");
 		textarea.style.boxSizing = "border-box";
@@ -236,10 +228,6 @@
 		};
 	}
 
-	function getTextBlockWidth(textarea, fontSize) {
-		return measure(textarea, fontSize).width;
-	}
-
 	function getTextareaMetrics(textareas, fontSize) {
 		let allFitWidth = true;
 		let maxTextWidth = 0;
@@ -255,7 +243,7 @@
 				borderX;
 			const fitWidth = Math.max(0, targetWidth - WRAP_BUFFER);
 			const size = measure(textarea, fontSize);
-			const textWidth = getTextBlockWidth(textarea, fontSize);
+			const textWidth = size.width;
 
 			minTargetWidth = Math.min(minTargetWidth, targetWidth);
 			maxTextWidth = Math.max(maxTextWidth, textWidth);
@@ -295,8 +283,6 @@
 			textarea.style.paddingBlockStart = `${sidePadding}px`;
 			textarea.style.paddingBlockEnd = `${sidePadding}px`;
 		}
-
-		return { ...metrics, sidePadding };
 	}
 
 	function fitAllTextareas() {
@@ -308,7 +294,7 @@
 
 		textareas.forEach(prepareTextarea);
 
-		const viewportHeight = getInitialViewportHeight();
+		const viewportHeight = initialViewportHeight || getViewportHeight();
 		let fontSize = findSharedFontSize(textareas);
 		applySharedLayout(textareas, fontSize);
 
@@ -363,7 +349,6 @@
 			? textareaTemplate.cloneNode(false)
 			: document.createElement("textarea");
 		textarea.value = "";
-		textarea.textContent = "";
 		const button = document.getElementById("add-textarea");
 		button.before(textarea);
 		bindTextarea(textarea);
@@ -453,18 +438,22 @@
 			const croppedCanvas = document.createElement("canvas");
 			const croppedContext = croppedCanvas.getContext("2d");
 			const sourceX = ((canvas.width / ratio - width) / 2) * ratio;
+			const outputWidth = Math.max(width, height);
+			const horizontalPadding = ((outputWidth - width) / 2) * ratio;
 
-			croppedCanvas.width = width * ratio;
+			croppedCanvas.width = outputWidth * ratio;
 			croppedCanvas.height = height * ratio;
+			croppedContext.fillStyle = rootStyles.backgroundColor;
+			croppedContext.fillRect(0, 0, croppedCanvas.width, croppedCanvas.height);
 			croppedContext.drawImage(
 				canvas,
 				sourceX,
 				0,
-				croppedCanvas.width,
+				width * ratio,
 				croppedCanvas.height,
+				horizontalPadding,
 				0,
-				0,
-				croppedCanvas.width,
+				width * ratio,
 				croppedCanvas.height,
 			);
 			showScreenshot(croppedCanvas.toDataURL("image/png"));
@@ -478,7 +467,6 @@
 		textareaTemplate = document.querySelector("textarea")?.cloneNode(false);
 		if (textareaTemplate) {
 			textareaTemplate.value = "";
-			textareaTemplate.textContent = "";
 		}
 
 		getTextareas().forEach(bindTextarea);

@@ -1,156 +1,158 @@
 html {
-  width: 30rem;
-  margin: 0 auto;
-  padding: 2rem 3rem;
-  background: #005291;
+	width: 30rem;
+	margin: 0 auto;
+	padding: 2rem 3rem;
+	background: #005291;
 }
 
 * {
-  margin: 0;
-  padding: 0;
-  font-family: "I.Ming", serif;
-  overflow: hidden;
-  appearance: none;
+	margin: 0;
+	padding: 0;
+	font-family: "I.Ming", serif;
+	overflow: hidden;
+	appearance: none;
 }
 
 input,
 textarea,
 button,
 select {
-  margin: 0.5rem 0;
-  background: none;
-  color: white;
-  font-size: 2rem;
+	margin: 0.5rem 0;
+	background: none;
+	color: white;
+	font-size: 2rem;
 }
 
 button,
 select {
-  cursor: pointer;
+	cursor: pointer;
 }
 
 textarea,
 button {
-  width: 100%;
-  height: 70px;
+	width: 100%;
+	height: 70px;
 }
 
 textarea,
 button,
 #screenshot-preview,
 #screenshot-image {
-  border: 1px dashed rgba(255, 255, 255, 0.5);
-  border-radius: 0.5rem;
+	border: 1px dashed rgba(255, 255, 255, 0.5);
+	border-radius: 0.5rem;
 }
 
 button,
 select,
 ::placeholder,
 #screenshot-hint {
-  color: rgba(255, 255, 255, 0.5);
+	color: rgba(255, 255, 255, 0.5);
 }
 
 input,
 div select,
 div button,
 #screenshot-hint {
-  text-align: center;
-  text-align-last: center;
+	text-align: center;
+	text-align-last: center;
 }
 
 div {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  position: relative;
+	display: flex;
+	gap: 1rem;
+	margin-bottom: 1rem;
+	position: relative;
 }
 
 svg {
-  width: 2rem;
-  height: 3rem;
-  position: absolute;
-  top: 0.5rem;
-  right: 0;
-  left: 0;
-  margin: auto;
-  pointer-events: none;
-  z-index: 0;
+	width: 2rem;
+	height: 3rem;
+	position: absolute;
+	top: 0.5rem;
+	right: 0;
+	left: 0;
+	margin: auto;
+	pointer-events: none;
+	z-index: 0;
 }
 
 input {
-  flex: 1;
-  line-height: 1.5;
-  min-width: 0;
-  position: relative;
-  z-index: 1;
-  border: none;
+	flex: 1;
+	line-height: 1.5;
+	min-width: 0;
+	position: relative;
+	z-index: 1;
+	border: none;
 }
 
 div select,
 div button {
-  width: 3rem;
-  height: 3rem;
-  flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 100%;
-  font-size: 1.5rem;
+	width: 3rem;
+	height: 3rem;
+	flex-shrink: 0;
+	border: 1px solid rgba(255, 255, 255, 0.5);
+	border-radius: 100%;
+	font-size: 1.5rem;
 }
 
 textarea {
-  box-sizing: border-box;
-  padding-block: 0;
-  resize: none;
-  line-height: 2;
-  text-orientation: mixed;
-  white-space: pre;
-  writing-mode: vertical-rl;
-}
-
-select:hover,
-button:hover {
-  border-color: rgba(255, 255, 255, 1);
-  color: rgba(255, 255, 255, 1);
+	box-sizing: border-box;
+	padding-block: 0;
+	resize: none;
+	line-height: 2;
+	text-orientation: mixed;
+	white-space: pre;
+	writing-mode: vertical-rl;
 }
 
 .is-capturing * {
-  border-color: transparent !important;
+	border-color: transparent !important;
 }
 
 .is-capturing select,
 .is-capturing #save-screenshot {
-  color: transparent !important;
+	color: transparent !important;
 }
 
 #screenshot-preview {
-  margin: auto;
-  padding: 1rem;
-  background: none;
-  border: none;
+	margin: auto;
+	padding: 1rem;
+	background: none;
+	border: none;
 }
 
 #screenshot-preview::backdrop {
-  background: none;
-  backdrop-filter: blur(0.5rem);
+	background: none;
+	backdrop-filter: blur(0.5rem);
 }
 
 #screenshot-link {
-  display: block;
+	display: block;
 }
 
 #screenshot-image {
-  display: block;
-  width: 15rem;
-  height: auto;
-  user-select: auto;
-  -webkit-touch-callout: default;
+	display: block;
+	width: 15rem;
+	height: auto;
+	user-select: auto;
+	-webkit-touch-callout: default;
 }
 
 #screenshot-hint {
-  line-height: 1;
-  margin-top: 1rem;
+	line-height: 1;
+	margin-top: 1rem;
 }
 
 @media screen and (max-width: 36rem) {
-  html {
-    width: auto;
-  }
+	html {
+		width: auto;
+	}
+}
+
+@media (hover: hover) {
+	select:hover,
+	button:hover {
+		border-color: rgba(255, 255, 255, 1);
+		color: rgba(255, 255, 255, 1);
+	}
 }
