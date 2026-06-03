@@ -2,6 +2,7 @@
 	const MIN_FONT_SIZE = 8;
 	const MAX_FONT_SIZE = 32;
 	const MAX_TEXTAREAS = 5;
+	const MAX_SHARE_URL_LENGTH = 2048;
 	const FIT_PRECISION = 0.1;
 	const WRAP_BUFFER = 2;
 	let textareaTemplate;
@@ -78,10 +79,164 @@
 	}
 
 	function getScreenshotText() {
-		const input = document.querySelector("input");
+		const input = getTitleInput();
 		return [input?.value || "", ...getTextareas().map(getTextareaText)].join(
 			"",
 		);
+	}
+
+	function getTitleInput() {
+		return document.querySelector("body > div input");
+	}
+
+	function decodeUrlText(text) {
+		try {
+			return decodeURIComponent(text.replace(/\+/g, " "));
+		} catch (error) {
+			console.warn("Unable to decode text from URL.", error);
+			return text;
+		}
+	}
+
+	function bytesToBase64(bytes) {
+		const chunkSize = 0x8000;
+		let binary = "";
+		for (let index = 0; index < bytes.length; index += chunkSize) {
+			binary += String.fromCharCode(
+				...bytes.subarray(index, index + chunkSize),
+			);
+		}
+
+		return btoa(binary);
+	}
+
+	function base64ToBytes(base64) {
+		const binary = atob(base64);
+		const bytes = new Uint8Array(binary.length);
+		for (let index = 0; index < binary.length; index++) {
+			bytes[index] = binary.charCodeAt(index);
+		}
+
+		return bytes;
+	}
+
+	function encodeTextSegment(text) {
+		return bytesToBase64(new TextEncoder().encode(text))
+			.replaceAll("+", "-")
+			.replaceAll("/", "_")
+			.replace(/=+$/, "");
+	}
+
+	function decodeTextSegment(text) {
+		try {
+			const normalizedText = text.replace(/=+$/, "");
+			const base64 = normalizedText.replaceAll("-", "+").replaceAll("_", "/");
+			const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+			const decodedText = new TextDecoder("utf-8", { fatal: true }).decode(
+				base64ToBytes(base64 + padding),
+			);
+			if (encodeTextSegment(decodedText) !== normalizedText) {
+				throw new Error("Not a canonical base64url text segment.");
+			}
+
+			return decodedText;
+		} catch {
+			return "";
+		}
+	}
+
+	function isUrlParameter(part, name) {
+		return part === name || part.startsWith(`${name}=`);
+	}
+
+	function getUrlOptions() {
+		const query = window.location.search.slice(1);
+		const options = {
+			canEdit: false,
+			hasTitle: false,
+			hasText: false,
+			segments: [],
+			title: "",
+		};
+		if (!query) return options;
+
+		let collectingText = false;
+		for (const part of query.split("&")) {
+			if (isUrlParameter(part, "edit")) {
+				options.canEdit = true;
+				continue;
+			}
+
+			if (isUrlParameter(part, "title")) {
+				options.hasTitle = true;
+				options.title = decodeUrlText(part.slice("title=".length));
+				continue;
+			}
+
+			if (isUrlParameter(part, "text")) {
+				options.hasText = true;
+				collectingText = true;
+				options.segments.push(decodeTextSegment(part.slice("text=".length)));
+				continue;
+			}
+
+			if (collectingText) {
+				options.segments.push(decodeTextSegment(part));
+			}
+		}
+
+		options.segments = options.segments.slice(0, MAX_TEXTAREAS);
+		return options;
+	}
+
+	function applyUrlOptions() {
+		const options = getUrlOptions();
+		if (!options.hasText && !options.hasTitle) return;
+
+		const input = getTitleInput();
+		if (input && options.hasTitle) input.value = options.title;
+
+		const textareas = getTextareas();
+		const firstTextarea = textareas[0];
+		const button = document.getElementById("add-textarea");
+		if (!firstTextarea || !button) return;
+
+		if (options.hasText) {
+			const segments = options.segments.length ? options.segments : [""];
+			firstTextarea.value = segments[0];
+			textareas.slice(1).forEach((textarea) => textarea.remove());
+
+			for (const segment of segments.slice(1)) {
+				const textarea = textareaTemplate
+					? textareaTemplate.cloneNode(false)
+					: document.createElement("textarea");
+				textarea.value = segment;
+				button.before(textarea);
+			}
+		}
+
+		if (!options.canEdit) {
+			document.documentElement.classList.add("is-capturing");
+			if (input) input.readOnly = true;
+			getTextareas().forEach((textarea) => {
+				textarea.readOnly = true;
+			});
+			button.hidden = true;
+		}
+	}
+
+	function getShareUrl() {
+		const segments = getTextareas().map(getTextareaText);
+		const title = getTitleInput()?.value || "";
+
+		const baseUrl = `${window.location.origin}${window.location.pathname}`;
+		const params = [];
+		if (title) params.push(`title=${encodeURIComponent(title)}`);
+		if (segments.length) {
+			params.push(`text=${segments.map(encodeTextSegment).join("&")}`);
+		}
+
+		return params.length ? `${baseUrl}?${params.join("&")}` : baseUrl;
 	}
 
 	function getUsedCodePoints() {
@@ -119,17 +274,7 @@
 	}
 
 	function arrayBufferToBase64(buffer) {
-		const bytes = new Uint8Array(buffer);
-		const chunkSize = 0x8000;
-		let binary = "";
-
-		for (let index = 0; index < bytes.length; index += chunkSize) {
-			binary += String.fromCharCode(
-				...bytes.subarray(index, index + chunkSize),
-			);
-		}
-
-		return btoa(binary);
+		return bytesToBase64(new Uint8Array(buffer));
 	}
 
 	async function getFontDataUrl(url) {
@@ -290,7 +435,11 @@
 		if (!textareas.length) return;
 
 		const button = document.getElementById("add-textarea");
-		if (button) button.hidden = textareas.length >= MAX_TEXTAREAS;
+		if (button) {
+			button.hidden =
+				document.documentElement.classList.contains("is-capturing") ||
+				textareas.length >= MAX_TEXTAREAS;
+		}
 
 		textareas.forEach(prepareTextarea);
 
@@ -309,7 +458,7 @@
 			applySharedLayout(textareas, fontSize);
 		}
 
-		const input = document.querySelector("input");
+		const input = getTitleInput();
 		if (input) input.style.fontSize = `${fontSize}px`;
 	}
 
@@ -362,14 +511,14 @@
 	}
 
 	function showScreenshot(dataUrl) {
-		let preview = document.getElementById("screenshot-preview");
-		let link = document.getElementById("screenshot-link");
-		let image = document.getElementById("screenshot-image");
-		let hint = document.getElementById("screenshot-hint");
+		let preview = document.querySelector("dialog");
+		let link = preview?.querySelector("a");
+		let image = preview?.querySelector("img");
+		let hint = preview?.querySelector("p");
+		let shareInput = preview?.querySelector("input");
 
 		if (!preview) {
 			preview = document.createElement("dialog");
-			preview.id = "screenshot-preview";
 			preview.addEventListener("click", (event) => {
 				if (event.target === preview) preview.close();
 			});
@@ -378,26 +527,37 @@
 
 		if (!link) {
 			link = document.createElement("a");
-			link.id = "screenshot-link";
 			link.download = "shiu.png";
 			preview.appendChild(link);
 		}
 
 		if (!image) {
 			image = document.createElement("img");
-			image.id = "screenshot-image";
 			link.appendChild(image);
 		}
 
 		if (!hint) {
 			hint = document.createElement("p");
-			hint.id = "screenshot-hint";
 			hint.textContent = "長 觸 存 之";
 			preview.appendChild(hint);
 		}
+		preview.insertBefore(hint, link);
 
+		if (!shareInput) {
+			shareInput = document.createElement("input");
+			shareInput.readOnly = true;
+			shareInput.addEventListener("click", () => shareInput.select());
+			preview.appendChild(shareInput);
+		}
+
+		const shareUrl = getShareUrl();
 		link.href = dataUrl;
 		image.src = dataUrl;
+		shareInput.hidden = shareUrl.length > MAX_SHARE_URL_LENGTH;
+		if (!shareInput.hidden) {
+			shareInput.value = shareUrl;
+			shareInput.title = shareUrl;
+		}
 		if (typeof preview.showModal === "function") {
 			preview.showModal();
 		} else {
@@ -469,6 +629,7 @@
 			textareaTemplate.value = "";
 		}
 
+		applyUrlOptions();
 		getTextareas().forEach(bindTextarea);
 		document
 			.getElementById("background-color")

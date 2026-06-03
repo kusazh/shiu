@@ -36,23 +36,26 @@ button {
 
 textarea,
 button,
-#screenshot-preview,
-#screenshot-image {
+dialog,
+dialog img,
+dialog input {
 	border: 1px dashed rgba(255, 255, 255, 0.5);
 	border-radius: 0.5rem;
 }
 
 button,
 select,
-::placeholder,
-#screenshot-hint {
+dialog p,
+dialog input,
+::placeholder {
 	color: rgba(255, 255, 255, 0.5);
 }
 
 input,
 div select,
 div button,
-#screenshot-hint {
+dialog p,
+dialog input {
 	text-align: center;
 	text-align-last: center;
 }
@@ -107,40 +110,41 @@ textarea {
 
 .is-capturing * {
 	border-color: transparent !important;
+	pointer-events: none;
 }
 
 .is-capturing select,
-.is-capturing #save-screenshot {
+.is-capturing button {
 	color: transparent !important;
 }
 
-#screenshot-preview {
+dialog {
 	margin: auto;
 	padding: 1rem;
 	background: none;
 	border: none;
+  line-height: 1;
 }
 
-#screenshot-preview::backdrop {
+dialog::backdrop {
 	background: none;
 	backdrop-filter: blur(0.5rem);
 }
 
-#screenshot-link {
-	display: block;
-}
-
-#screenshot-image {
+dialog img {
 	display: block;
 	width: 15rem;
 	height: auto;
-	user-select: auto;
-	-webkit-touch-callout: default;
 }
 
-#screenshot-hint {
-	line-height: 1;
-	margin-top: 1rem;
+dialog p {
+	margin-bottom: 1rem;
+}
+
+dialog input {
+  width: 15rem;
+	margin: 1rem 0 0 0;
+  font-size: 1rem;
 }
 
 @media screen and (max-width: 36rem) {
