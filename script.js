@@ -592,9 +592,13 @@
 		}
 	}
 
-	async function saveScreenshot() {
-		if (!window.htmlToImage) return;
+	async function saveScreenshot(button) {
+		if (!window.htmlToImage || !button) return;
 
+		const initialText = button.textContent;
+
+		button.textContent = "待";
+		button.disabled = true;
 		await document.fonts?.ready;
 		const fontEmbedCSS = await getEmbeddedFontCss();
 		const rootStyles = getComputedStyle(document.documentElement);
@@ -645,6 +649,8 @@
 			);
 			showScreenshot(croppedCanvas.toDataURL("image/png"));
 		} finally {
+			button.textContent = initialText;
+			button.disabled = false;
 			document.documentElement.classList.remove("is-capturing");
 		}
 	}
@@ -665,7 +671,9 @@
 			);
 		document
 			.getElementById("save-screenshot")
-			?.addEventListener("click", saveScreenshot);
+			?.addEventListener("click", (event) =>
+				saveScreenshot(event.currentTarget),
+			);
 		document
 			.getElementById("add-textarea")
 			?.addEventListener("click", createTextarea);

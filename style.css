@@ -13,6 +13,10 @@ html {
 	appearance: none;
 }
 
+*:focus {
+	outline: none;
+}
+
 input,
 textarea,
 button,
@@ -62,13 +66,13 @@ dialog input {
 
 div {
 	display: flex;
+	height: 4rem;
 	gap: 1rem;
 	margin-bottom: 1rem;
 	position: relative;
 }
 
 svg {
-	width: 2rem;
 	height: 3rem;
 	position: absolute;
 	top: 0.5rem;
@@ -115,7 +119,7 @@ textarea {
 
 .is-capturing select,
 .is-capturing button {
-	color: transparent !important;
+	display: none;
 }
 
 dialog {
@@ -123,7 +127,7 @@ dialog {
 	padding: 1rem;
 	background: none;
 	border: none;
-  line-height: 1;
+	line-height: 1;
 }
 
 dialog::backdrop {
@@ -142,9 +146,9 @@ dialog p {
 }
 
 dialog input {
-  width: 15rem;
+	width: 15rem;
 	margin: 1rem 0 0 0;
-  font-size: 1rem;
+	font-size: 1rem;
 }
 
 @media screen and (max-width: 36rem) {
@@ -155,7 +159,8 @@ dialog input {
 
 @media (hover: hover) {
 	select:hover,
-	button:hover {
+	button:hover,
+	textarea:hover {
 		border-color: rgba(255, 255, 255, 1);
 		color: rgba(255, 255, 255, 1);
 	}
