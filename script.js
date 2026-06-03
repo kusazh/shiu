@@ -153,6 +153,8 @@
 		const query = window.location.search.slice(1);
 		const options = {
 			canEdit: false,
+			bgOption: 0,
+			hasBgOption: false,
 			hasTitle: false,
 			hasText: false,
 			segments: [],
@@ -164,6 +166,18 @@
 		for (const part of query.split("&")) {
 			if (isUrlParameter(part, "edit")) {
 				options.canEdit = true;
+				continue;
+			}
+
+			if (isUrlParameter(part, "bg")) {
+				const bgOption = Number.parseInt(
+					decodeUrlText(part.slice("bg=".length)),
+					10,
+				);
+				if (!Number.isNaN(bgOption)) {
+					options.bgOption = bgOption;
+					options.hasBgOption = true;
+				}
 				continue;
 			}
 
@@ -191,10 +205,21 @@
 
 	function applyUrlOptions() {
 		const options = getUrlOptions();
-		if (!options.hasText && !options.hasTitle) return;
+		if (!options.hasText && !options.hasTitle && !options.hasBgOption) return;
 
 		const input = getTitleInput();
 		if (input && options.hasTitle) input.value = options.title;
+
+		const select = document.getElementById("background-color");
+		if (
+			select &&
+			options.hasBgOption &&
+			options.bgOption >= 0 &&
+			options.bgOption < select.options.length
+		) {
+			select.selectedIndex = options.bgOption;
+			applyBackgroundColor(select);
+		}
 
 		const textareas = getTextareas();
 		const firstTextarea = textareas[0];
@@ -221,16 +246,18 @@
 			getTextareas().forEach((textarea) => {
 				textarea.readOnly = true;
 			});
-			button.hidden = true;
 		}
 	}
 
 	function getShareUrl() {
 		const segments = getTextareas().map(getTextareaText);
 		const title = getTitleInput()?.value || "";
+		const bgOption =
+			document.getElementById("background-color")?.selectedIndex || 0;
 
 		const baseUrl = `${window.location.origin}${window.location.pathname}`;
 		const params = [];
+		if (bgOption > 0) params.push(`bg=${bgOption}`);
 		if (title) params.push(`title=${encodeURIComponent(title)}`);
 		if (segments.length) {
 			params.push(`text=${segments.map(encodeTextSegment).join("&")}`);
@@ -506,8 +533,8 @@
 		textarea.select();
 	}
 
-	function updateBackgroundColor(event) {
-		document.documentElement.style.backgroundColor = event.currentTarget.value;
+	function applyBackgroundColor(select) {
+		document.documentElement.style.backgroundColor = select.value;
 	}
 
 	function showScreenshot(dataUrl) {
@@ -633,7 +660,9 @@
 		getTextareas().forEach(bindTextarea);
 		document
 			.getElementById("background-color")
-			?.addEventListener("change", updateBackgroundColor);
+			?.addEventListener("change", (event) =>
+				applyBackgroundColor(event.currentTarget),
+			);
 		document
 			.getElementById("save-screenshot")
 			?.addEventListener("click", saveScreenshot);
