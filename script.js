@@ -2,21 +2,24 @@
 	const MIN_FONT_SIZE = 8;
 	const MAX_FONT_SIZE = 32;
 	const MAX_TEXTAREAS = 5;
-	const MAX_SHARE_URL_LENGTH = 2048;
-	const FIT_PRECISION = 0.1;
+	const MAX_URL = 2048;
+	const PRECISION = 0.1;
 	const WRAP_BUFFER = 2;
-	let textareaTemplate;
-	let initialViewportHeight;
-	let fontCssTextPromise;
-	const embeddedFontCssCache = new Map();
-	const fontDataUrlCache = new Map();
-	const composingTextareas = new WeakSet();
+	let textareaTpl;
+	let kujiRows;
+	let kujiNo;
+	let viewHeight;
+	let fontCss;
+	const cssCache = new Map();
+	const fontCache = new Map();
+	const composing = new WeakSet();
+	let kujiTimer;
 
 	function px(value) {
 		return Number.parseFloat(value) || 0;
 	}
 
-	function copyTextStyles(from, to) {
+	function copyStyles(from, to) {
 		const styles = window.getComputedStyle(from);
 		for (const property of [
 			"fontFamily",
@@ -74,19 +77,67 @@
 		return textarea.value || textarea.placeholder || " ";
 	}
 
-	function getFontStylesheetUrl() {
+	function getFontSheet() {
 		return document.querySelector('link[href$="I.Ming.css"]')?.href;
 	}
 
-	function getScreenshotText() {
-		const input = getTitleInput();
-		return [input?.value || "", ...getTextareas().map(getTextareaText)].join(
-			"",
-		);
+	function getShotText() {
+		const el = getTitleInput();
+		return [el?.value || "", ...getTextareas().map(getTextareaText)].join("");
 	}
 
 	function getTitleInput() {
-		return document.querySelector("body > div input");
+		return document.querySelector("header input");
+	}
+
+	function showKuji(button, { transition = true } = {}) {
+		clearTimeout(kujiTimer);
+		button.disabled = false;
+		button.classList.toggle("waiting", transition);
+		button.hidden = false;
+		button.style.removeProperty("opacity");
+		button.style.removeProperty("transition");
+		if (transition) {
+			kujiTimer = setTimeout(() => {
+				button.classList.remove("waiting");
+			}, 5000);
+			button.addEventListener("transitionend", () => {
+				button.style.transition = "none";
+			});
+		}
+	}
+
+	function hideKuji() {
+		const button = document.getElementById("kuji");
+
+		if (!button) return;
+		clearTimeout(kujiTimer);
+		button.disabled = false;
+		button.hidden = true;
+		button.classList.remove("waiting");
+	}
+
+	function disableKuji() {
+		const button = document.getElementById("kuji");
+
+		if (!button) return;
+		clearTimeout(kujiTimer);
+		button.disabled = true;
+		button.hidden = false;
+		button.classList.remove("waiting");
+	}
+
+	function exitKuji() {
+		kujiNo = undefined;
+		hideKuji();
+	}
+
+	function lockPage(el = getTitleInput()) {
+		document.documentElement.classList.add("capturing");
+		if (el) el.readOnly = true;
+		getTextareas().forEach((textarea) => {
+			textarea.readOnly = true;
+		});
 	}
 
 	function decodeUrlText(text) {
@@ -98,7 +149,7 @@
 		}
 	}
 
-	function bytesToBase64(bytes) {
+	function encodeBase64(bytes) {
 		const chunkSize = 0x8000;
 		let binary = "";
 		for (let index = 0; index < bytes.length; index += chunkSize) {
@@ -110,7 +161,7 @@
 		return btoa(binary);
 	}
 
-	function base64ToBytes(base64) {
+	function decodeBase64(base64) {
 		const binary = atob(base64);
 		const bytes = new Uint8Array(binary.length);
 		for (let index = 0; index < binary.length; index++) {
@@ -120,22 +171,97 @@
 		return bytes;
 	}
 
-	function encodeTextSegment(text) {
-		return bytesToBase64(new TextEncoder().encode(text))
+	function parseCsv(text) {
+		const rows = [];
+		let row = [];
+		let field = "";
+		let inQuotes = false;
+
+		for (let index = 0; index < text.length; index++) {
+			const character = text[index];
+
+			if (inQuotes) {
+				if (character === '"' && text[index + 1] === '"') {
+					field += '"';
+					index++;
+				} else if (character === '"') {
+					inQuotes = false;
+				} else {
+					field += character;
+				}
+				continue;
+			}
+
+			if (character === '"') {
+				inQuotes = true;
+			} else if (character === ",") {
+				row.push(field);
+				field = "";
+			} else if (character === "\n") {
+				row.push(field);
+				if (row.some((value) => value !== "")) rows.push(row);
+				row = [];
+				field = "";
+			} else if (character !== "\r") {
+				field += character;
+			}
+		}
+
+		row.push(field);
+		if (row.some((value) => value !== "")) rows.push(row);
+		return rows;
+	}
+
+	function decodeKujiLines(text) {
+		return text.replaceAll("\\n", "\n");
+	}
+
+	function getKujiBg(label) {
+		const fortune = decodeKujiLines(label).split("\n").at(-1)?.trim();
+		switch (fortune) {
+			case "大吉":
+				return 3;
+			case "吉":
+				return 2;
+			case "半吉":
+			case "末吉":
+				return 0;
+			case "末小吉":
+			case "小吉":
+				return 1;
+			case "凶":
+				return 4;
+			default:
+				return 0;
+		}
+	}
+
+	async function loadKuji() {
+		kujiRows ||= fetch("kuji.csv")
+			.then((response) => {
+				if (!response.ok) throw new Error(`Unable to load Kujis`);
+				return response.text();
+			})
+			.then((text) => parseCsv(text).filter((row) => row.length >= 2));
+		return kujiRows;
+	}
+
+	function encodeText(text) {
+		return encodeBase64(new TextEncoder().encode(text))
 			.replaceAll("+", "-")
 			.replaceAll("/", "_")
 			.replace(/=+$/, "");
 	}
 
-	function decodeTextSegment(text) {
+	function decodeText(text) {
 		try {
 			const normalizedText = text.replace(/=+$/, "");
 			const base64 = normalizedText.replaceAll("-", "+").replaceAll("_", "/");
 			const padding = "=".repeat((4 - (base64.length % 4)) % 4);
 			const decodedText = new TextDecoder("utf-8", { fatal: true }).decode(
-				base64ToBytes(base64 + padding),
+				decodeBase64(base64 + padding),
 			);
-			if (encodeTextSegment(decodedText) !== normalizedText) {
+			if (encodeText(decodedText) !== normalizedText) {
 				throw new Error("Not a canonical base64url text segment.");
 			}
 
@@ -145,7 +271,7 @@
 		}
 	}
 
-	function isUrlParameter(part, name) {
+	function isParam(part, name) {
 		return part === name || part.startsWith(`${name}=`);
 	}
 
@@ -157,6 +283,7 @@
 			hasBgOption: false,
 			hasTitle: false,
 			hasText: false,
+			kujiNumber: undefined,
 			segments: [],
 			title: "",
 		};
@@ -164,12 +291,23 @@
 
 		let collectingText = false;
 		for (const part of query.split("&")) {
-			if (isUrlParameter(part, "edit")) {
+			if (isParam(part, "edit")) {
 				options.canEdit = true;
 				continue;
 			}
 
-			if (isUrlParameter(part, "bg")) {
+			if (isParam(part, "kuji")) {
+				const kujiNumber = Number.parseInt(
+					decodeUrlText(part.slice("kuji=".length)),
+					10,
+				);
+				if (kujiNumber >= 1 && kujiNumber <= 100) {
+					options.kujiNumber = kujiNumber;
+				}
+				continue;
+			}
+
+			if (isParam(part, "bg")) {
 				const bgOption = Number.parseInt(
 					decodeUrlText(part.slice("bg=".length)),
 					10,
@@ -181,21 +319,21 @@
 				continue;
 			}
 
-			if (isUrlParameter(part, "title")) {
+			if (isParam(part, "title")) {
 				options.hasTitle = true;
 				options.title = decodeUrlText(part.slice("title=".length));
 				continue;
 			}
 
-			if (isUrlParameter(part, "text")) {
+			if (isParam(part, "text")) {
 				options.hasText = true;
 				collectingText = true;
-				options.segments.push(decodeTextSegment(part.slice("text=".length)));
+				options.segments.push(decodeText(part.slice("text=".length)));
 				continue;
 			}
 
 			if (collectingText) {
-				options.segments.push(decodeTextSegment(part));
+				options.segments.push(decodeText(part));
 			}
 		}
 
@@ -203,12 +341,19 @@
 		return options;
 	}
 
-	function applyUrlOptions() {
+	async function applyUrl() {
 		const options = getUrlOptions();
-		if (!options.hasText && !options.hasTitle && !options.hasBgOption) return;
+		if (options.kujiNumber) {
+			await setKuji(options.kujiNumber);
+			if (!options.canEdit) lockPage();
+			return options;
+		}
+		if (!options.hasText && !options.hasTitle && !options.hasBgOption) {
+			return options;
+		}
 
-		const input = getTitleInput();
-		if (input && options.hasTitle) input.value = options.title;
+		const el = getTitleInput();
+		if (el && options.hasTitle) el.value = options.title;
 
 		const select = document.getElementById("background-color");
 		if (
@@ -218,13 +363,13 @@
 			options.bgOption < select.options.length
 		) {
 			select.selectedIndex = options.bgOption;
-			applyBackgroundColor(select);
+			setBg(select);
 		}
 
 		const textareas = getTextareas();
 		const firstTextarea = textareas[0];
-		const button = document.getElementById("add-textarea");
-		if (!firstTextarea || !button) return;
+		const button = document.getElementById("add");
+		if (!firstTextarea || !button) return options;
 
 		if (options.hasText) {
 			const segments = options.segments.length ? options.segments : [""];
@@ -232,49 +377,45 @@
 			textareas.slice(1).forEach((textarea) => textarea.remove());
 
 			for (const segment of segments.slice(1)) {
-				const textarea = textareaTemplate
-					? textareaTemplate.cloneNode(false)
+				const textarea = textareaTpl
+					? textareaTpl.cloneNode(false)
 					: document.createElement("textarea");
 				textarea.value = segment;
 				button.before(textarea);
 			}
 		}
 
-		if (!options.canEdit) {
-			document.documentElement.classList.add("is-capturing");
-			if (input) input.readOnly = true;
-			getTextareas().forEach((textarea) => {
-				textarea.readOnly = true;
-			});
-		}
+		if (!options.canEdit) lockPage(el);
+
+		return options;
 	}
 
-	function getShareUrl() {
+	function makeShareUrl() {
+		const baseUrl = `${window.location.origin}${window.location.pathname}`;
+		if (kujiNo) return `${baseUrl}?kuji=${kujiNo}`;
+
 		const segments = getTextareas().map(getTextareaText);
 		const title = getTitleInput()?.value || "";
 		const bgOption =
 			document.getElementById("background-color")?.selectedIndex || 0;
-
-		const baseUrl = `${window.location.origin}${window.location.pathname}`;
 		const params = [];
 		if (bgOption > 0) params.push(`bg=${bgOption}`);
 		if (title) params.push(`title=${encodeURIComponent(title)}`);
 		if (segments.length) {
-			params.push(`text=${segments.map(encodeTextSegment).join("&")}`);
+			params.push(`text=${segments.map(encodeText).join("&")}`);
 		}
-
 		return params.length ? `${baseUrl}?${params.join("&")}` : baseUrl;
 	}
 
-	function getUsedCodePoints() {
+	function getCodePoints() {
 		const codePoints = new Set();
-		for (const character of getScreenshotText()) {
+		for (const character of getShotText()) {
 			codePoints.add(character.codePointAt(0));
 		}
 		return codePoints;
 	}
 
-	function unicodeRangeMatches(rangeText, codePoints) {
+	function matchesRange(rangeText, codePoints) {
 		if (!rangeText) return true;
 
 		for (const range of rangeText.split(",")) {
@@ -300,26 +441,24 @@
 		return false;
 	}
 
-	function arrayBufferToBase64(buffer) {
-		return bytesToBase64(new Uint8Array(buffer));
+	function encodeBuffer(buffer) {
+		return encodeBase64(new Uint8Array(buffer));
 	}
 
-	async function getFontDataUrl(url) {
-		if (!fontDataUrlCache.has(url)) {
-			fontDataUrlCache.set(
+	async function loadFontUrl(url) {
+		if (!fontCache.has(url)) {
+			fontCache.set(
 				url,
 				fetch(url)
 					.then((response) => response.arrayBuffer())
-					.then(
-						(buffer) => `data:font/woff2;base64,${arrayBufferToBase64(buffer)}`,
-					),
+					.then((buffer) => `data:font/woff2;base64,${encodeBuffer(buffer)}`),
 			);
 		}
 
-		return fontDataUrlCache.get(url);
+		return fontCache.get(url);
 	}
 
-	async function embedFontFaceBlock(block, baseUrl) {
+	async function embedFont(block, baseUrl) {
 		let embeddedBlock = block;
 		const urls = [...block.matchAll(/url\((['"]?)([^'")]+\.woff2)\1\)/g)].map(
 			(match) => match[2],
@@ -329,41 +468,36 @@
 			const absoluteUrl = new URL(url, baseUrl).href;
 			embeddedBlock = embeddedBlock.replaceAll(
 				url,
-				await getFontDataUrl(absoluteUrl),
+				await loadFontUrl(absoluteUrl),
 			);
 		}
 
 		return embeddedBlock;
 	}
 
-	async function getEmbeddedFontCss() {
-		const stylesheetUrl = getFontStylesheetUrl();
+	async function getEmbeddedCss() {
+		const stylesheetUrl = getFontSheet();
 		if (!stylesheetUrl) return "";
 
-		const codePoints = getUsedCodePoints();
+		const codePoints = getCodePoints();
 		const cacheKey = [...codePoints].sort((a, b) => a - b).join(",");
-		if (embeddedFontCssCache.has(cacheKey))
-			return embeddedFontCssCache.get(cacheKey);
+		if (cssCache.has(cacheKey)) return cssCache.get(cacheKey);
 
 		try {
-			fontCssTextPromise ||= fetch(stylesheetUrl).then((response) =>
-				response.text(),
-			);
-			const cssText = await fontCssTextPromise;
+			fontCss ||= fetch(stylesheetUrl).then((response) => response.text());
+			const cssText = await fontCss;
 			const blocks = cssText.match(/@font-face\s*{[\s\S]*?}/g) || [];
 			const matchingBlocks = blocks.filter((block) => {
 				const range = block.match(/unicode-range:\s*([^;]+);/i)?.[1];
-				return unicodeRangeMatches(range, codePoints);
+				return matchesRange(range, codePoints);
 			});
 			const embeddedCss = (
 				await Promise.all(
-					matchingBlocks.map((block) =>
-						embedFontFaceBlock(block, stylesheetUrl),
-					),
+					matchingBlocks.map((block) => embedFont(block, stylesheetUrl)),
 				)
 			).join("\n");
 
-			embeddedFontCssCache.set(cacheKey, embeddedCss);
+			cssCache.set(cacheKey, embeddedCss);
 			return embeddedCss;
 		} catch (error) {
 			console.warn("Unable to embed web font for screenshot.", error);
@@ -386,7 +520,7 @@
 
 	function measure(textarea, fontSize) {
 		const mirror = getMirror();
-		copyTextStyles(textarea, mirror);
+		copyStyles(textarea, mirror);
 		mirror.style.fontSize = `${fontSize}px`;
 		mirror.style.padding = "0px";
 		mirror.style.paddingBlockStart = "0px";
@@ -426,11 +560,11 @@
 		return { allFitWidth, maxTextWidth, maxHeight, minTargetWidth };
 	}
 
-	function findSharedFontSize(textareas) {
+	function findFontSize(textareas) {
 		let low = MIN_FONT_SIZE;
 		let high = MAX_FONT_SIZE;
 
-		while (high - low > FIT_PRECISION) {
+		while (high - low > PRECISION) {
 			const mid = (low + high) / 2;
 			if (getTextareaMetrics(textareas, mid).allFitWidth) {
 				low = mid;
@@ -442,7 +576,7 @@
 		return Math.max(MIN_FONT_SIZE, low);
 	}
 
-	function applySharedLayout(textareas, fontSize) {
+	function layoutTextareas(textareas, fontSize) {
 		const metrics = getTextareaMetrics(textareas, fontSize);
 		const sidePadding = Math.max(
 			0,
@@ -457,22 +591,22 @@
 		}
 	}
 
-	function fitAllTextareas() {
+	function fit() {
 		const textareas = getTextareas();
 		if (!textareas.length) return;
 
-		const button = document.getElementById("add-textarea");
+		const button = document.getElementById("add");
 		if (button) {
 			button.hidden =
-				document.documentElement.classList.contains("is-capturing") ||
+				document.documentElement.classList.contains("capturing") ||
 				textareas.length >= MAX_TEXTAREAS;
 		}
 
 		textareas.forEach(prepareTextarea);
 
-		const viewportHeight = initialViewportHeight || getViewportHeight();
-		let fontSize = findSharedFontSize(textareas);
-		applySharedLayout(textareas, fontSize);
+		const viewportHeight = viewHeight || getViewportHeight();
+		let fontSize = findFontSize(textareas);
+		layoutTextareas(textareas, fontSize);
 
 		for (let attempts = 0; attempts < 10; attempts++) {
 			const pageHeight = document.documentElement.scrollHeight;
@@ -482,62 +616,166 @@
 				MIN_FONT_SIZE,
 				fontSize * (viewportHeight / pageHeight) * 0.98,
 			);
-			applySharedLayout(textareas, fontSize);
+			layoutTextareas(textareas, fontSize);
 		}
 
-		const input = getTitleInput();
-		if (input) input.style.fontSize = `${fontSize}px`;
+		const el = getTitleInput();
+		if (el) el.style.fontSize = `${fontSize}px`;
 	}
 
-	function handleTextareaInput(event) {
+	function onInput(event) {
+		exitKuji();
 		const textarea = event.currentTarget;
 		if (
 			!event.isComposing &&
-			!composingTextareas.has(textarea) &&
+			!composing.has(textarea) &&
 			textarea.value === "" &&
 			getTextareas().length > 1
 		) {
 			textarea.remove();
 		}
 
-		fitAllTextareas();
+		fit();
 	}
 
-	function handleCompositionStart(event) {
-		composingTextareas.add(event.currentTarget);
+	function onCompositionStart(event) {
+		composing.add(event.currentTarget);
 	}
 
-	function handleCompositionEnd(event) {
-		composingTextareas.delete(event.currentTarget);
-		fitAllTextareas();
+	function onCompositionEnd(event) {
+		composing.delete(event.currentTarget);
+		fit();
 	}
 
 	function bindTextarea(textarea) {
-		textarea.addEventListener("input", handleTextareaInput);
-		textarea.addEventListener("compositionstart", handleCompositionStart);
-		textarea.addEventListener("compositionend", handleCompositionEnd);
+		textarea.addEventListener("focus", exitKuji);
+		textarea.addEventListener("pointerdown", exitKuji);
+		textarea.addEventListener("input", onInput);
+		textarea.addEventListener("compositionstart", onCompositionStart);
+		textarea.addEventListener("compositionend", onCompositionEnd);
 	}
 
-	function createTextarea() {
+	function addTextarea() {
 		if (getTextareas().length >= MAX_TEXTAREAS) return;
 
-		const textarea = textareaTemplate
-			? textareaTemplate.cloneNode(false)
+		const textarea = textareaTpl
+			? textareaTpl.cloneNode(false)
 			: document.createElement("textarea");
 		textarea.value = "";
-		const button = document.getElementById("add-textarea");
+		const button = document.getElementById("add");
 		button.before(textarea);
 		bindTextarea(textarea);
-		fitAllTextareas();
+		fit();
 		textarea.focus();
 		textarea.select();
 	}
 
-	function applyBackgroundColor(select) {
+	function setBg(select) {
 		document.documentElement.style.backgroundColor = select.value;
 	}
 
-	function showScreenshot(dataUrl) {
+	function parseMs(value) {
+		const trimmedValue = value.trim();
+		if (trimmedValue.endsWith("ms")) return px(trimmedValue);
+		if (trimmedValue.endsWith("s")) return px(trimmedValue) * 1000;
+		return px(trimmedValue) * 1000;
+	}
+
+	function getMaxTransition(element) {
+		const styles = window.getComputedStyle(element);
+		const durations = styles.transitionDuration.split(",").map(parseMs);
+		const delays = styles.transitionDelay.split(",").map(parseMs);
+		return Math.max(
+			0,
+			...durations.map((duration, index) => duration + (delays[index] || 0)),
+		);
+	}
+
+	function waitForBg(action) {
+		const transitionTime = getMaxTransition(document.documentElement);
+
+		return new Promise((resolve) => {
+			let timer;
+			const finish = () => {
+				clearTimeout(timer);
+				document.documentElement.removeEventListener(
+					"transitionend",
+					handleTransitionEnd,
+				);
+				resolve();
+			};
+			const handleTransitionEnd = (event) => {
+				if (event.propertyName === "background-color") finish();
+			};
+
+			document.documentElement.addEventListener(
+				"transitionend",
+				handleTransitionEnd,
+			);
+			action();
+			timer = setTimeout(finish, transitionTime + 50);
+		});
+	}
+
+	function ensureTextareas(count) {
+		let textareas = getTextareas();
+		while (textareas.length > count) {
+			textareas.pop().remove();
+		}
+		while (textareas.length < count) {
+			const textarea = textareaTpl
+				? textareaTpl.cloneNode(false)
+				: document.createElement("textarea");
+			textarea.value = "";
+			const button = document.getElementById("add");
+			button.before(textarea);
+			bindTextarea(textarea);
+			textareas.push(textarea);
+		}
+		return textareas;
+	}
+
+	async function setKuji(number, shouldWaitForBg = false) {
+		const rows = await loadKuji();
+		const row = rows[number - 1];
+		if (!row) return false;
+
+		kujiNo = number;
+		const [label, poem] = row;
+		const textareas = ensureTextareas(2);
+		const el = getTitleInput();
+		if (el) el.value = "";
+		textareas[0].value = `\n${decodeKujiLines(label)}`;
+		textareas[1].value = decodeKujiLines(poem);
+
+		const select = document.getElementById("background-color");
+		if (select) {
+			select.selectedIndex = getKujiBg(label);
+			if (shouldWaitForBg) {
+				await waitForBg(() => setBg(select));
+			} else {
+				setBg(select);
+			}
+		}
+
+		fit();
+		return true;
+	}
+
+	async function drawKuji() {
+		try {
+			const rows = await loadKuji();
+			if (!rows.length) return false;
+
+			const number = Math.floor(Math.random() * rows.length) + 1;
+			return setKuji(number, true);
+		} catch (error) {
+			console.warn("Unable to draw kuji.", error);
+			return false;
+		}
+	}
+
+	function showPreview(dataUrl) {
 		let preview = document.querySelector("dialog");
 		let link = preview?.querySelector("a");
 		let image = preview?.querySelector("img");
@@ -577,10 +815,10 @@
 			preview.appendChild(shareInput);
 		}
 
-		const shareUrl = getShareUrl();
+		const shareUrl = makeShareUrl();
 		link.href = dataUrl;
 		image.src = dataUrl;
-		shareInput.hidden = shareUrl.length > MAX_SHARE_URL_LENGTH;
+		shareInput.hidden = shareUrl.length > MAX_URL;
 		if (!shareInput.hidden) {
 			shareInput.value = shareUrl;
 			shareInput.title = shareUrl;
@@ -592,17 +830,17 @@
 		}
 	}
 
-	async function saveScreenshot(button) {
-		if (!window.htmlToImage || !button) return;
+	async function saveImage() {
+		if (!window.htmlToImage) return;
+		const saveButton = document.getElementById("save");
+		const initialText = saveButton.textContent;
 
-		const initialText = button.textContent;
-
-		button.textContent = "待";
-		button.disabled = true;
+		saveButton.textContent = "待";
+		saveButton.disabled = true;
 		await document.fonts?.ready;
-		const fontEmbedCSS = await getEmbeddedFontCss();
+		const fontEmbedCSS = await getEmbeddedCss();
 		const rootStyles = getComputedStyle(document.documentElement);
-		const addButton = document.getElementById("add-textarea");
+		const addButton = document.getElementById("add");
 		const paddingX = px(rootStyles.paddingLeft) + px(rootStyles.paddingRight);
 		const fullWidth = document.documentElement.scrollWidth;
 		const width = Math.min(fullWidth, px(rootStyles.width) + paddingX);
@@ -610,7 +848,7 @@
 			0,
 			document.documentElement.scrollHeight - (addButton.hidden ? 0 : 35),
 		);
-		document.documentElement.classList.add("is-capturing");
+		document.documentElement.classList.add("capturing");
 
 		try {
 			const ratio = window.devicePixelRatio || 1;
@@ -647,38 +885,58 @@
 				width * ratio,
 				croppedCanvas.height,
 			);
-			showScreenshot(croppedCanvas.toDataURL("image/png"));
+			showPreview(croppedCanvas.toDataURL("image/png"));
 		} finally {
-			button.textContent = initialText;
-			button.disabled = false;
-			document.documentElement.classList.remove("is-capturing");
+			saveButton.textContent = initialText;
+			saveButton.disabled = false;
+			document.documentElement.classList.remove("capturing");
 		}
 	}
 
-	document.addEventListener("DOMContentLoaded", () => {
-		initialViewportHeight = getViewportHeight();
-		textareaTemplate = document.querySelector("textarea")?.cloneNode(false);
-		if (textareaTemplate) {
-			textareaTemplate.value = "";
+	document.addEventListener("DOMContentLoaded", async () => {
+		viewHeight = getViewportHeight();
+		textareaTpl = document.querySelector("textarea")?.cloneNode(false);
+		if (textareaTpl) {
+			textareaTpl.value = "";
 		}
 
-		applyUrlOptions();
+		const options = await applyUrl();
 		getTextareas().forEach(bindTextarea);
+		const titleInput = getTitleInput();
+		titleInput?.addEventListener("focus", exitKuji);
+		titleInput?.addEventListener("pointerdown", exitKuji);
+		titleInput?.addEventListener("input", exitKuji);
 		document
 			.getElementById("background-color")
-			?.addEventListener("change", (event) =>
-				applyBackgroundColor(event.currentTarget),
-			);
-		document
-			.getElementById("save-screenshot")
-			?.addEventListener("click", (event) =>
-				saveScreenshot(event.currentTarget),
-			);
-		document
-			.getElementById("add-textarea")
-			?.addEventListener("click", createTextarea);
-		window.addEventListener("resize", fitAllTextareas);
-		document.fonts?.ready.then(fitAllTextareas);
-		fitAllTextareas();
+			?.addEventListener("change", (event) => {
+				setBg(event.currentTarget);
+			});
+		document.getElementById("save")?.addEventListener("click", () => {
+			if (!kujiNo) hideKuji();
+			saveImage();
+		});
+		document.getElementById("add")?.addEventListener("click", () => {
+			exitKuji();
+			addTextarea();
+		});
+		const kujiButton = document.getElementById("kuji");
+		if (kujiButton) {
+			if (options.hasText && !options.kujiNumber) {
+				hideKuji();
+			} else if (options.kujiNumber) {
+				showKuji(kujiButton, { transition: false });
+			} else {
+				showKuji(kujiButton);
+			}
+			kujiButton.addEventListener("click", async () => {
+				if (await drawKuji()) {
+					await saveImage();
+					disableKuji();
+				}
+			});
+		}
+		window.addEventListener("resize", fit);
+		document.fonts?.ready.then(fit);
+		fit();
 	});
 })();

@@ -15,7 +15,7 @@
   </head>
 
   <body>
-    <div>
+    <header>
       <select id="background-color">
         <option value="#005291" style="background-color: #005291;">青</option>
         <option value="#147b3a" style="background-color: #147b3a;">葱</option>
@@ -23,9 +23,9 @@
         <option value="#725777" style="background-color: #725777;">紫</option>
         <option value="#0a0f13" style="background-color: #0a0f13;">黒</option>
       </select>
-      <svg width="32" height="29" viewBox="0 0 32 29" fill="url(#g)" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <svg width="32" height="29" viewBox="0 0 32 29" fill="url(#g1)" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <defs>
-          <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="white" stop-opacity="0.5" />
             <stop offset="100%" stop-color="white" stop-opacity="0.25" />
           </linearGradient>
@@ -33,9 +33,22 @@
         <path d="M24 12C24 5.37 20.42 0 16 0S8 5.37 8 12C8 5.37 4.42 0 0 0C1.7 0 3.16 6.4 3.74 15.42C3.74 15.42 4 29 16 29S28.26 15.42 28.26 15.42C28.84 6.4 30.3 0 32 0C27.58 0 24 5.37 24 12Z" />
       </svg>
       <input>
-      <button id="save-screenshot" type="button">↓</button>
-    </div>
+      <button id="save" type="button">↓</button>
+    </header>
     <textarea placeholder="⋯⋯" wrap="off" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
-    <button id="add-textarea" type="button">＋</button>
+    <button id="add" type="button">＋</button>
+    <button id="kuji" type="button" hidden>
+      <svg width="29" height="47" viewBox="0 0 29 47" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="g2" x1="14.5" y1="4.88464" x2="14.5" y2="46.8846" gradientUnits="userSpaceOnUse">
+            <stop stop-color="white" stop-opacity="0.5"/>
+            <stop offset="1" stop-color="white"/>
+          </linearGradient>
+        </defs>
+        <path d="M19.8428 4.88464C21.0362 4.88464 22.1815 5.35909 23.0254 6.203L29 12.1776V37.7274C29 38.9209 28.5256 40.0661 27.6816 40.91L23.0254 45.5663C22.1815 46.4102 21.0362 46.8846 19.8428 46.8846H9.15723C7.96375 46.8846 6.81852 46.4102 5.97461 45.5663L1.31836 40.91C0.474446 40.0661 0 38.9209 0 37.7274V12.1776L5.97461 6.203C6.81852 5.35909 7.96375 4.88464 9.15723 4.88464H19.8428ZM8 21.8846C7.72386 21.8846 7.5 22.1085 7.5 22.3846V42.3846C7.5 42.6608 7.72386 42.8846 8 42.8846C8.27614 42.8846 8.5 42.6608 8.5 42.3846V22.3846C8.5 22.1085 8.27614 21.8846 8 21.8846ZM21 21.8846C20.7239 21.8846 20.5 22.1085 20.5 22.3846V42.3846C20.5 42.6608 20.7239 42.8846 21 42.8846C21.2761 42.8846 21.5 42.6608 21.5 42.3846V22.3846C21.5 22.1085 21.2761 21.8846 21 21.8846ZM9.15723 5.88464C8.22897 5.88464 7.33802 6.25366 6.68164 6.91003L1.20703 12.3846L6.68164 17.8593C7.33802 18.5156 8.22897 18.8846 9.15723 18.8846H19.8428C20.771 18.8846 21.662 18.5156 22.3184 17.8593L27.793 12.3846L22.3184 6.91003C21.662 6.25366 20.771 5.88464 19.8428 5.88464H9.15723Z" fill="url(#g2)"/>
+        <path d="M14.5 10.3846C15.8198 10.3846 16.9898 10.6535 17.8115 11.0643C18.6632 11.4902 19 11.9857 19 12.3846C19 12.7836 18.6632 13.2791 17.8115 13.705C16.9898 14.1158 15.8198 14.3846 14.5 14.3846C13.1802 14.3846 12.0102 14.1158 11.1885 13.705C10.3368 13.2791 10 12.7836 10 12.3846C10 11.9857 10.3368 11.4902 11.1885 11.0643C12.0102 10.6535 13.1802 10.3846 14.5 10.3846Z" fill="white" stroke="white"/>
+        <path d="M14.5 12.3847L19.5 0.384643" stroke="white" stroke-width="2"/>
+      </svg>
+    </button>
   </body>
 </html>

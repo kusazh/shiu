@@ -3,6 +3,7 @@ html {
 	margin: 0 auto;
 	padding: 2rem 3rem;
 	background: #005291;
+	transition: background 0.3s ease;
 }
 
 * {
@@ -56,15 +57,15 @@ dialog input,
 }
 
 input,
-div select,
-div button,
+header select,
+header button,
 dialog p,
 dialog input {
 	text-align: center;
 	text-align-last: center;
 }
 
-div {
+header {
 	display: flex;
 	height: 4rem;
 	gap: 1rem;
@@ -72,7 +73,7 @@ div {
 	position: relative;
 }
 
-svg {
+header svg {
 	height: 3rem;
 	position: absolute;
 	top: 0.5rem;
@@ -92,8 +93,8 @@ input {
 	border: none;
 }
 
-div select,
-div button {
+header select,
+header button {
 	width: 3rem;
 	height: 3rem;
 	flex-shrink: 0;
@@ -112,13 +113,15 @@ textarea {
 	writing-mode: vertical-rl;
 }
 
-.is-capturing * {
+.capturing *,
+#kuji:disabled {
 	border-color: transparent !important;
 	pointer-events: none;
 }
 
-.is-capturing select,
-.is-capturing button {
+.capturing select,
+.capturing #add,
+.capturing #save {
 	display: none;
 }
 
@@ -151,6 +154,24 @@ dialog input {
 	font-size: 1rem;
 }
 
+#kuji {
+	position: absolute;
+	bottom: calc(3.5rem + 35px);
+	right: 0;
+	left: 0;
+	width: 29px;
+	border: none;
+	margin: auto;
+	opacity: 0.5;
+	transition: opacity 0.3s ease;
+}
+
+#kuji.waiting,
+#kuji.waiting:hover {
+	opacity: 0;
+	transition: none;
+}
+
 @media screen and (max-width: 36rem) {
 	html {
 		width: auto;
@@ -163,5 +184,14 @@ dialog input {
 	textarea:hover {
 		border-color: rgba(255, 255, 255, 1);
 		color: rgba(255, 255, 255, 1);
+	}
+
+	#kuji:hover {
+		opacity: 1;
+		transition: none;
+	}
+
+	.capturing #kuji:hover {
+		opacity: 0.5;
 	}
 }
