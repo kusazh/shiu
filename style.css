@@ -156,10 +156,10 @@ dialog input {
 
 #kuji {
 	position: absolute;
-	bottom: calc(3.5rem + 35px);
+	bottom: 5rem;
 	right: 0;
 	left: 0;
-	width: 29px;
+	width: 26px;
 	border: none;
 	margin: auto;
 	opacity: 0.5;

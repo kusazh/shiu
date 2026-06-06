@@ -846,7 +846,7 @@
 		const width = Math.min(fullWidth, px(rootStyles.width) + paddingX);
 		const height = Math.max(
 			0,
-			document.documentElement.scrollHeight - (addButton.hidden ? 0 : 35),
+			document.documentElement.scrollHeight - (addButton.hidden ? 0 : 32),
 		);
 		document.documentElement.classList.add("capturing");
 
