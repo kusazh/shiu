@@ -5,6 +5,7 @@
 	const MAX_URL = 2048;
 	const PRECISION = 0.1;
 	const WRAP_BUFFER = 2;
+	const TRANSITION_MS = 300;
 	let textareaTpl;
 	let kujiRows;
 	let kujiNo;
@@ -60,10 +61,8 @@
 			visibility: "hidden",
 			width: "0px",
 			height: "0px",
-			whiteSpace: "pre",
 			overflow: "visible",
 			pointerEvents: "none",
-			resize: "none",
 		});
 		document.body.appendChild(mirror);
 		return mirror;
@@ -77,62 +76,51 @@
 		return textarea.value || textarea.placeholder || " ";
 	}
 
-	function getFontSheet() {
-		return document.querySelector('link[href$="I.Ming.css"]')?.href;
-	}
-
 	function getShotText() {
-		const el = getTitleInput();
+		const el = document.querySelector("header input");
 		return [el?.value || "", ...getTextareas().map(getTextareaText)].join("");
 	}
 
-	function getTitleInput() {
-		return document.querySelector("header input");
-	}
-
-	function showKuji(button, { transition = true } = {}) {
-		clearTimeout(kujiTimer);
-		button.disabled = false;
-		button.classList.toggle("waiting", transition);
-		button.hidden = false;
-		button.style.removeProperty("opacity");
-		button.style.removeProperty("transition");
-		if (transition) {
-			kujiTimer = setTimeout(() => {
-				button.classList.remove("waiting");
-			}, 5000);
-			button.addEventListener("transitionend", () => {
-				button.style.transition = "none";
-			});
-		}
-	}
-
-	function hideKuji() {
+	function showKuji(shouldTransition = true) {
 		const button = document.getElementById("kuji");
 
 		if (!button) return;
 		clearTimeout(kujiTimer);
 		button.disabled = false;
-		button.hidden = true;
-		button.classList.remove("waiting");
+		button.classList.toggle("waiting", shouldTransition);
+		button.hidden = false;
+		button.style.removeProperty("opacity");
+		button.style.removeProperty("transition");
+		if (shouldTransition) {
+			kujiTimer = setTimeout(() => {
+				button.classList.remove("waiting");
+			}, 5000);
+			button.addEventListener(
+				"transitionend",
+				() => {
+					button.style.transition = "none";
+				},
+				{ once: true },
+			);
+		}
 	}
 
-	function disableKuji() {
+	function disableKuji(shouldHide = true) {
 		const button = document.getElementById("kuji");
 
 		if (!button) return;
 		clearTimeout(kujiTimer);
 		button.disabled = true;
-		button.hidden = false;
 		button.classList.remove("waiting");
+		if (shouldHide) button.hidden = true;
 	}
 
 	function exitKuji() {
 		kujiNo = undefined;
-		hideKuji();
+		disableKuji();
 	}
 
-	function lockPage(el = getTitleInput()) {
+	function lockPage(el = document.querySelector("header input")) {
 		document.documentElement.classList.add("capturing");
 		if (el) el.readOnly = true;
 		getTextareas().forEach((textarea) => {
@@ -352,7 +340,7 @@
 			return options;
 		}
 
-		const el = getTitleInput();
+		const el = document.querySelector("header input");
 		if (el && options.hasTitle) el.value = options.title;
 
 		const select = document.getElementById("background-color");
@@ -363,7 +351,7 @@
 			options.bgOption < select.options.length
 		) {
 			select.selectedIndex = options.bgOption;
-			setBg(select);
+			setBg(select.value);
 		}
 
 		const textareas = getTextareas();
@@ -374,7 +362,9 @@
 		if (options.hasText) {
 			const segments = options.segments.length ? options.segments : [""];
 			firstTextarea.value = segments[0];
-			textareas.slice(1).forEach((textarea) => textarea.remove());
+			textareas.slice(1).forEach((textarea) => {
+				textarea.remove();
+			});
 
 			for (const segment of segments.slice(1)) {
 				const textarea = textareaTpl
@@ -395,7 +385,7 @@
 		if (kujiNo) return `${baseUrl}?kuji=${kujiNo}`;
 
 		const segments = getTextareas().map(getTextareaText);
-		const title = getTitleInput()?.value || "";
+		const title = document.querySelector("header input")?.value || "";
 		const bgOption =
 			document.getElementById("background-color")?.selectedIndex || 0;
 		const params = [];
@@ -441,17 +431,16 @@
 		return false;
 	}
 
-	function encodeBuffer(buffer) {
-		return encodeBase64(new Uint8Array(buffer));
-	}
-
 	async function loadFontUrl(url) {
 		if (!fontCache.has(url)) {
 			fontCache.set(
 				url,
 				fetch(url)
 					.then((response) => response.arrayBuffer())
-					.then((buffer) => `data:font/woff2;base64,${encodeBuffer(buffer)}`),
+					.then(
+						(buffer) =>
+							`data:font/woff2;base64,${encodeBase64(new Uint8Array(buffer))}`,
+					),
 			);
 		}
 
@@ -476,7 +465,9 @@
 	}
 
 	async function getEmbeddedCss() {
-		const stylesheetUrl = getFontSheet();
+		const stylesheetUrl = document.querySelector(
+			'link[href$="I.Ming.css"]',
+		)?.href;
 		if (!stylesheetUrl) return "";
 
 		const codePoints = getCodePoints();
@@ -488,7 +479,7 @@
 			const cssText = await fontCss;
 			const blocks = cssText.match(/@font-face\s*{[\s\S]*?}/g) || [];
 			const matchingBlocks = blocks.filter((block) => {
-				const range = block.match(/unicode-range:\s*([^;]+);/i)?.[1];
+				const range = block.match(/unicode-range:\s*([^;}]+)(?:;|})/i)?.[1];
 				return matchesRange(range, codePoints);
 			});
 			const embeddedCss = (
@@ -619,7 +610,7 @@
 			layoutTextareas(textareas, fontSize);
 		}
 
-		const el = getTitleInput();
+		const el = document.querySelector("header input");
 		if (el) el.style.fontSize = `${fontSize}px`;
 	}
 
@@ -638,21 +629,17 @@
 		fit();
 	}
 
-	function onCompositionStart(event) {
-		composing.add(event.currentTarget);
-	}
-
-	function onCompositionEnd(event) {
-		composing.delete(event.currentTarget);
-		fit();
-	}
-
 	function bindTextarea(textarea) {
 		textarea.addEventListener("focus", exitKuji);
 		textarea.addEventListener("pointerdown", exitKuji);
 		textarea.addEventListener("input", onInput);
-		textarea.addEventListener("compositionstart", onCompositionStart);
-		textarea.addEventListener("compositionend", onCompositionEnd);
+		textarea.addEventListener("compositionstart", (event) => {
+			composing.add(event.currentTarget);
+		});
+		textarea.addEventListener("compositionend", (event) => {
+			composing.delete(event.currentTarget);
+			fit();
+		});
 	}
 
 	function addTextarea() {
@@ -670,30 +657,11 @@
 		textarea.select();
 	}
 
-	function setBg(select) {
-		document.documentElement.style.backgroundColor = select.value;
-	}
-
-	function parseMs(value) {
-		const trimmedValue = value.trim();
-		if (trimmedValue.endsWith("ms")) return px(trimmedValue);
-		if (trimmedValue.endsWith("s")) return px(trimmedValue) * 1000;
-		return px(trimmedValue) * 1000;
-	}
-
-	function getMaxTransition(element) {
-		const styles = window.getComputedStyle(element);
-		const durations = styles.transitionDuration.split(",").map(parseMs);
-		const delays = styles.transitionDelay.split(",").map(parseMs);
-		return Math.max(
-			0,
-			...durations.map((duration, index) => duration + (delays[index] || 0)),
-		);
+	function setBg(value) {
+		document.documentElement.style.backgroundColor = value;
 	}
 
 	function waitForBg(action) {
-		const transitionTime = getMaxTransition(document.documentElement);
-
 		return new Promise((resolve) => {
 			let timer;
 			const finish = () => {
@@ -713,12 +681,12 @@
 				handleTransitionEnd,
 			);
 			action();
-			timer = setTimeout(finish, transitionTime + 50);
+			timer = setTimeout(finish, TRANSITION_MS + 50);
 		});
 	}
 
 	function ensureTextareas(count) {
-		let textareas = getTextareas();
+		const textareas = getTextareas();
 		while (textareas.length > count) {
 			textareas.pop().remove();
 		}
@@ -743,7 +711,7 @@
 		kujiNo = number;
 		const [label, poem] = row;
 		const textareas = ensureTextareas(2);
-		const el = getTitleInput();
+		const el = document.querySelector("header input");
 		if (el) el.value = "";
 		textareas[0].value = `\n${decodeKujiLines(label)}`;
 		textareas[1].value = decodeKujiLines(poem);
@@ -752,9 +720,9 @@
 		if (select) {
 			select.selectedIndex = getKujiBg(label);
 			if (shouldWaitForBg) {
-				await waitForBg(() => setBg(select));
+				await waitForBg(() => setBg(select.value));
 			} else {
-				setBg(select);
+				setBg(select.value);
 			}
 		}
 
@@ -832,6 +800,7 @@
 
 	async function saveImage() {
 		if (!window.htmlToImage) return;
+		disableKuji(false);
 		const saveButton = document.getElementById("save");
 		const initialText = saveButton.textContent;
 
@@ -848,6 +817,9 @@
 			0,
 			document.documentElement.scrollHeight - (addButton.hidden ? 0 : 32),
 		);
+		// const select = document.getElementById("background-color");
+		// await waitForBg(() => setBg("#ffffff"));
+		// await waitForBg(() => setBg(select.value));
 		document.documentElement.classList.add("capturing");
 
 		try {
@@ -902,17 +874,17 @@
 
 		const options = await applyUrl();
 		getTextareas().forEach(bindTextarea);
-		const titleInput = getTitleInput();
+		const titleInput = document.querySelector("header input");
 		titleInput?.addEventListener("focus", exitKuji);
 		titleInput?.addEventListener("pointerdown", exitKuji);
 		titleInput?.addEventListener("input", exitKuji);
 		document
 			.getElementById("background-color")
 			?.addEventListener("change", (event) => {
-				setBg(event.currentTarget);
+				setBg(event.currentTarget.value);
 			});
 		document.getElementById("save")?.addEventListener("click", () => {
-			if (!kujiNo) hideKuji();
+			if (!kujiNo) disableKuji();
 			saveImage();
 		});
 		document.getElementById("add")?.addEventListener("click", () => {
@@ -922,16 +894,15 @@
 		const kujiButton = document.getElementById("kuji");
 		if (kujiButton) {
 			if (options.hasText && !options.kujiNumber) {
-				hideKuji();
+				disableKuji();
 			} else if (options.kujiNumber) {
-				showKuji(kujiButton, { transition: false });
+				showKuji(false);
 			} else {
-				showKuji(kujiButton);
+				showKuji();
 			}
 			kujiButton.addEventListener("click", async () => {
 				if (await drawKuji()) {
 					await saveImage();
-					disableKuji();
 				}
 			});
 		}

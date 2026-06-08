@@ -127,7 +127,6 @@ textarea {
 
 dialog {
 	margin: auto;
-	padding: 1rem;
 	background: none;
 	border: none;
 	line-height: 1;
@@ -160,6 +159,7 @@ dialog input {
 	right: 0;
 	left: 0;
 	width: 26px;
+	height: auto;
 	border: none;
 	margin: auto;
 	opacity: 0.5;
